@@ -9,6 +9,8 @@ import io.micronaut.context.annotation.Bean
 import io.micronaut.context.annotation.Factory
 import io.micronaut.context.annotation.Primary
 import io.micronaut.context.env.MapPropertySource
+import io.micronaut.inject.qualifiers.Qualifiers
+import io.micronaut.transaction.annotation.TransactionalAdvice
 import io.micronaut.transaction.exceptions.NoTransactionException
 import io.micronaut.transaction.jdbc.DataSourceTransactionManager
 import io.requery.meta.EntityModel
@@ -347,6 +349,65 @@ class MicronautRequeryTest {
             applicationContext.stop()
         }
     }
+
+    @Test
+    fun testMultipleDataSource() {
+        val applicationContext = DefaultApplicationContext("test")
+        applicationContext.environment.addPropertySource(
+            MapPropertySource.of(
+                "test",
+                mapOf(
+                    "datasources.default.url" to "jdbc:h2:mem:default;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+                    "datasources.default.username" to "sa",
+                    "datasources.default.password" to "",
+                    "datasources.second-datasource.url" to "jdbc:h2:mem:second-datasource;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+                    "datasources.second-datasource.username" to "sa",
+                    "datasources.second-datasource.password" to ""
+                )
+            )
+        )
+        applicationContext.start()
+
+        try {
+            Assertions.assertTrue(applicationContext.containsBean(DataSource::class.java))
+            Assertions.assertTrue(applicationContext.containsBean(DataSourceTransactionManager::class.java))
+
+            val transactionManager = applicationContext.getBean(DataSourceTransactionManager::class.java)
+
+            val dataSource = applicationContext.getBean(DataSource::class.java)
+            transactionManager.executeWrite {
+                dataSource.connection.use { conn ->
+                    conn.createStatement().use { statement ->
+                        statement.execute(setupDatabase)
+                    }
+                }
+            }
+
+            val transactionManagerSecondDatasource = applicationContext.getBean(DataSourceTransactionManager::class.java, Qualifiers.byName("second-datasource"))
+            val dataSourceSecondDatasource = applicationContext.getBean(DataSource::class.java, Qualifiers.byName("second-datasource"))
+            transactionManagerSecondDatasource.executeWrite {
+                dataSourceSecondDatasource.connection.use { conn ->
+                    conn.createStatement().use { statement ->
+                        statement.execute(setupDatabase)
+                    }
+                }
+            }
+            Assertions.assertTrue(applicationContext.containsBean(TestService::class.java))
+            Assertions.assertTrue(applicationContext.containsBean(TestServiceSecondDatasource::class.java))
+            val testService = applicationContext.getBean(TestService::class.java)
+            val testServiceSecondDatasource = applicationContext.getBean(TestServiceSecondDatasource::class.java)
+
+            Assertions.assertNull(testService.findById("Hello World"))
+            testService.save(TestData("Hello World"))
+            Assertions.assertNotNull(testService.findById("Hello World"))
+
+            Assertions.assertNull(testServiceSecondDatasource.findById("Hello World"))
+            testServiceSecondDatasource.save(TestData("Hello World"))
+            Assertions.assertNotNull(testServiceSecondDatasource.findById("Hello World"))
+        } finally {
+            applicationContext.stop()
+        }
+    }
 }
 
 @Factory
@@ -362,6 +423,21 @@ class MicronautTestFactory {
     @Named("second-datasource")
     fun secondEntityModel(): EntityModel {
         return Models.DEFAULT
+    }
+}
+
+@Singleton
+open class TestServiceSecondDatasource(
+    @Named("second-datasource") private val entityDataStore: MicronautKotlinEntityDataStore<TestData>
+) {
+    @TransactionalAdvice("second-datasource")
+    @Transactional
+    open fun save(entity: TestData) {
+        entityDataStore.upsert(entity)
+    }
+
+    open fun findById(id: String): TestData? {
+        return entityDataStore.findByKey(TestData::class, id)
     }
 }
 

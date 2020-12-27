@@ -24,7 +24,8 @@ class RequeryConfigurationFactory {
     @EachBean(DataSource::class)
     fun micronautKotlinEntityDataStore(
         @Parameter name: String,
-        applicationContext: ApplicationContext
+        applicationContext: ApplicationContext,
+        dataSource: DataSource
     ): MicronautKotlinEntityDataStore<Persistable> {
 
         val requeryDataSourceConfiguration =
@@ -32,9 +33,6 @@ class RequeryConfigurationFactory {
                 .orElse(RequeryDataSourceConfiguration())
         val qualifier = if (name == RequeryDataSourceConfiguration.DEFAULT) null else name
 
-        val dataSource = applicationContext.getBean(
-            DataSource::class.java, if (qualifier != null) Qualifiers.byName(qualifier) else null
-        )
         val transactionManager = applicationContext.getBean(
             DataSourceTransactionManager::class.java, if (qualifier != null) Qualifiers.byName(qualifier) else null
         )
@@ -74,7 +72,8 @@ class RequeryConfigurationFactory {
     @EachBean(DataSource::class)
     fun micronautEntityDataStore(
         @Parameter name: String,
-        applicationContext: ApplicationContext
+        applicationContext: ApplicationContext,
+        dataSource: DataSource
     ): MicronautEntityDataStore<Persistable> {
 
         val requeryDataSourceConfiguration =
@@ -82,9 +81,6 @@ class RequeryConfigurationFactory {
                 .orElse(RequeryDataSourceConfiguration())
         val qualifier = if (name == RequeryDataSourceConfiguration.DEFAULT) null else name
 
-        val dataSource = applicationContext.getBean(
-            DataSource::class.java, if (qualifier != null) Qualifiers.byName(qualifier) else null
-        )
         val transactionManager = applicationContext.getBean(
             DataSourceTransactionManager::class.java, if (qualifier != null) Qualifiers.byName(qualifier) else null
         )
