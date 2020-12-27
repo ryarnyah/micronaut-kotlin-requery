@@ -8,7 +8,7 @@ plugins {
     id("signing")
 }
 
-version = "0.0.1-SNAPSHOT"
+version = getGitVersion()
 group = "com.github.ryarnyah"
 
 val kotlinVersion = project.properties["kotlinVersion"]
@@ -72,9 +72,9 @@ publishing {
                     }
                 }
                 scm {
-                    connection.set("scm:git:git@github.com:ryarnyah/micronaut-kotlin-requery.git")
-                    developerConnection.set("scm:git:git@github.com:ryarnyah/micronaut-kotlin-requery.git")
-                    url.set("https://github.com/ryarnyah/micronaut-kotlin-requery")
+                    connection.set("scm:git:git@github.com:ryarnyah/micronaut-requery.git")
+                    developerConnection.set("scm:git:git@github.com:ryarnyah/micronaut-requery.git")
+                    url.set("https://github.com/ryarnyah/micronaut-requery")
                 }
             }
         }
@@ -112,6 +112,29 @@ tasks {
             jvmTarget = "11"
         }
     }
+}
+
+
+// Tooling
+fun getGitVersion(defaultVersion: String = "0.0.1"): String {
+    var gitLastTag = "git describe --abbrev=0 --tags".runCommand()
+    if (gitLastTag.isEmpty()) {
+        gitLastTag = defaultVersion
+    }
+    val gitCurrentTag = "git describe --exact-match --tags HEAD".runCommand()
+    return gitLastTag + (if (gitCurrentTag != gitLastTag) "-SNAPSHOT" else "")
+}
+
+fun String.runCommand(workingDir: File = file("./")): String {
+    val parts = this.split("\\s".toRegex())
+    val proc = ProcessBuilder(*parts.toTypedArray())
+        .directory(workingDir)
+        .redirectOutput(ProcessBuilder.Redirect.PIPE)
+        .redirectError(ProcessBuilder.Redirect.PIPE)
+        .start()
+
+    proc.waitFor(1, TimeUnit.MINUTES)
+    return proc.inputStream.bufferedReader().readText().trim()
 }
 
 inline val Project.isSnapshot

@@ -1,4 +1,4 @@
-# Micronaut-Kotlin-Requery
+# Micronaut-Requery
 
 Micronaut support for [Requery](https://github.com/requery/requery)
 
@@ -8,7 +8,7 @@ dependencies {
     //...
     kapt("io.requery:requery-processor:${requeryVersion}")
     //...
-    implementation("com.github.ryarnyah:micronaut-kotlin-requery:${micronautKotlinRequeryVersion}")
+    implementation("com.github.ryarnyah:micronaut-requery:${micronautKotlinRequeryVersion}")
     implementation("io.requery:requery:${requeryVersion}")
     implementation("io.requery:requery-kotlin:${requeryVersion}")
     //...
@@ -16,6 +16,7 @@ dependencies {
 ```
 
 ## HowToUse
+### Kotlin version
 ```kotlin
 @Entity
 data class TestData (
@@ -47,6 +48,43 @@ open class TestService(
     }
 }
 ```
+### Java version
+```java
+@Entity
+public class TestData extends Observable, Parcelable, Persistable {
+    @Key
+    @Generated
+    String getUid();
+}
+
+@Factory
+public class MicronautTestFactory {
+
+    @Bean
+    public EntityModel entityModel() {
+        return Models.DEFAULT;
+    }
+}
+
+@Singleton
+public class TestService {
+    
+    private final MicronautEntityDataStore<TestData> entityDataStore;
+
+    public TestService(MicronautEntityDataStore<TestData> entityDataStore) {
+        this.entityDataStore = entityDataStore;
+    }
+
+    @Transactional
+    public void save(TestData entity) {
+        entityDataStore.upsert(entity);
+    }
+    
+    public TestData findById(String id) {
+        return entityDataStore.findByKey(TestData.class, id);
+    }
+}
+```
 
 ## Configuration
 Basic configuration can be applied
@@ -59,7 +97,8 @@ requery:
     quote-table-names: false # boolean
     quote-column-names: false # boolean
 ```
-For more specific configuration, define a bean with `RequeryDataSourceConfiguration.DEFAULT` quelifier.
+For more specific configuration, define a bean with `RequeryDataSourceConfiguration.DEFAULT` qualifier.
+### Kotlin version
 ```kotlin
 @Factory
 class MicronautTestFactory {
@@ -73,11 +112,26 @@ class MicronautTestFactory {
     }
 }
 ```
+### Java version
+```java
+@Factory
+public class MicronautTestFactory {
+
+    @Bean
+    @Named(RequeryDataSourceConfiguration.DEFAULT)
+    public RequeryDataSourceConfiguration requeryDataSourceConfiguration() {
+        RequeryDataSourceConfiguration configuration = new RequeryDataSourceConfiguration();
+        configuration.setUseDefaultLogging(true);
+        return configuration;
+    }
+}
+```
 You can use multiple dataSource like with JDBC (it will try to find `dataSource`, `transactionManager` and `entityModel` with the same qualifier)
 ```yaml
 requery:
   second-datasource:
 ```
+### Kotlin version
 ```kotlin
 @Factory
 class MicronautTestFactory {
@@ -91,8 +145,28 @@ class MicronautTestFactory {
 
     @Bean
     @Named("second-datasource")
-    fun entityModel(): EntityModel {
+    fun secondEntityModel(): EntityModel {
         return Models.DEFAULT
+    }
+
+}
+```
+### Java version
+```java
+@Factory
+public class MicronautTestFactory {
+    
+    @Bean
+    // Define it as primary
+    @Primary
+    public EntityModel entityModel() {
+        return Models.DEFAULT;
+    }
+
+    @Bean
+    @Named("second-datasource")
+    public EntityModel secondEntityModel() {
+        return Models.DEFAULT;
     }
 
 }
@@ -102,3 +176,4 @@ class MicronautTestFactory {
 - [X] Add `LinkedDataSource` to solve `statement.getConnection().close()` (in requery)
 - [X] Disable requery transaction to prefer using Micronaut transaction support
 - [X] Disable requery cache using `EmptyEntityCache`
+- [X] Add Java Support

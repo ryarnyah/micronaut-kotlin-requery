@@ -1,1 +1,1 @@
-rootProject.name="micronaut-kotlin-requery"
+rootProject.name="micronaut-requery"

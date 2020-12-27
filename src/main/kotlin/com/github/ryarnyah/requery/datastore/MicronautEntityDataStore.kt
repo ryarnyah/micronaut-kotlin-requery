@@ -1,29 +1,30 @@
 package com.github.ryarnyah.requery.datastore
 
 import io.micronaut.transaction.jdbc.DataSourceTransactionManager
+import io.requery.BlockingEntityStore
 import io.requery.Transaction
 import io.requery.TransactionIsolation
-import io.requery.kotlin.BlockingEntityStore
-import io.requery.kotlin.QueryDelegate
-import io.requery.kotlin.QueryableAttribute
-import io.requery.kotlin.Selection
 import io.requery.meta.Attribute
+import io.requery.meta.QueryAttribute
 import io.requery.query.*
+import io.requery.query.element.QueryElement
 import io.requery.sql.Configuration
-import kotlin.reflect.KClass
+import java.util.concurrent.Callable
 
-class MicronautKotlinEntityDataStore<T : Any>(
-    val delegate: BlockingEntityStore<T>,
+class MicronautEntityDataStore<T: Any>(
+    private val delegate: BlockingEntityStore<T>,
     private val transactionManager: DataSourceTransactionManager,
     private val configuration: Configuration
-) : BlockingEntityStore<T> by delegate {
+): BlockingEntityStore<T> by delegate {
+
+    override fun transaction(): Transaction = delegate.transaction()
 
     @Suppress("UNCHECKED_CAST")
     private fun <E> result(
         query: Return<out Result<E>>,
         transactionManager: DataSourceTransactionManager
-    ): QueryDelegate<TransactionalResult<E>> {
-        val element = query as QueryDelegate<Result<E>>
+    ): QueryElement<TransactionalResult<E>> {
+        val element = query as QueryElement<Result<E>>
         return element.extend { result -> TransactionalResult(result, transactionManager) }
     }
 
@@ -32,15 +33,12 @@ class MicronautKotlinEntityDataStore<T : Any>(
         query: Return<out Scalar<E>>,
         transactionManager: DataSourceTransactionManager,
         configuration: Configuration
-    ): QueryDelegate<TransactionalScalar<E>> {
-        val element = query as QueryDelegate<Scalar<E>>
+    ): QueryElement<TransactionalScalar<E>> {
+        val element = query as QueryElement<Scalar<E>>
         return element.extend { result -> TransactionalScalar(result, transactionManager, configuration) }
     }
 
-    override val transaction: Transaction
-        get() = delegate.transaction
-
-    override fun <E : T, K> findByKey(type: KClass<E>, key: K): E? {
+    override fun <E : T, K> findByKey(type: Class<E>?, key: K): E {
         return transactionManager.executeRead {
             delegate.findByKey(type, key)
         }
@@ -64,39 +62,46 @@ class MicronautKotlinEntityDataStore<T : Any>(
         }
     }
 
-    override fun <V> withTransaction(isolation: TransactionIsolation, body: BlockingEntityStore<T>.() -> V): V {
+    override fun <V : Any?> runInTransaction(callable: Callable<V>?): V {
         return transactionManager.executeWrite {
-            delegate.withTransaction(isolation, body)
+            delegate.runInTransaction(callable)
         }
     }
 
-    override fun <V> withTransaction(body: BlockingEntityStore<T>.() -> V): V {
+    override fun <V : Any?> runInTransaction(callable: Callable<V>?, isolation: TransactionIsolation?): V {
         return transactionManager.executeWrite {
-            delegate.withTransaction(body)
+            delegate.runInTransaction(callable, isolation)
         }
     }
 
     override fun toBlocking(): BlockingEntityStore<T> = this
 
-    override fun count(vararg attributes: QueryableAttribute<T, *>): Selection<out Scalar<Int>> =
+    override fun count(vararg attributes: QueryAttribute<*, *>?): Selection<out Scalar<Int>> =
         scalar(delegate.count(*attributes), transactionManager, configuration)
 
-    override fun <E : T> count(type: KClass<E>): Selection<out Scalar<Int>> =
+
+    override fun <E : T> count(type: Class<E>): Selection<out Scalar<Int>> =
         scalar(delegate.count(type), transactionManager, configuration)
 
-    override fun select(vararg expressions: Expression<*>): Selection<out Result<Tuple>> =
-        result(delegate.select(*expressions), transactionManager)
 
-    override fun <E : T> select(type: KClass<E>): Selection<out Result<E>> = transactionManager.executeRead {
-        result(delegate.select(type), transactionManager)
-    }
+    override fun select(vararg expressions: Expression<*>): Selection<out Result<Tuple>> =
+        transactionManager.executeRead {
+            result(delegate.select(*expressions), transactionManager)
+        }
 
     override fun <E : T> select(
-        type: KClass<E>,
-        vararg attributes: QueryableAttribute<E, *>
+        type: Class<E>,
+        attributes: MutableSet<out QueryAttribute<E, *>>
     ): Selection<out Result<E>> = transactionManager.executeRead {
-        result(delegate.select(type, *attributes), transactionManager)
+        result(delegate.select(type, attributes), transactionManager)
     }
+
+    override fun select(expressions: MutableSet<out Expression<*>>): Selection<out Result<Tuple>> = transactionManager.executeRead {
+        result(delegate.select(expressions), transactionManager)
+    }
+
+    override fun <E : T> select(type: Class<E>, vararg attributes: QueryAttribute<*, *>?): Selection<out Result<E>> =
+        result(delegate.select(type, *attributes), transactionManager)
 
     override fun <E : T> refresh(entity: E): E {
         return transactionManager.executeRead {
