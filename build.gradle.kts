@@ -58,6 +58,10 @@ publishing {
             from(components["java"])
 
             pom {
+                name.set("Micronaut support for Requery")
+                url.set("https://github.com/ryarnyah/micronaut-requery")
+                description.set("Micronaut support for Requery")
+
                 licenses {
                     license {
                         name.set("The Apache License, Version 2.0")
@@ -92,6 +96,11 @@ publishing {
             }
         }
     }
+}
+
+nexusStaging {
+    username = System.getenv("SONATYPE_USERNAME")
+    password = System.getenv("SONATYPE_PASSWORD")
 }
 
 java {
